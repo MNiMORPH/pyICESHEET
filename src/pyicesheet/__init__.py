@@ -17,6 +17,8 @@ from .contour import Contour, ContourManager
 from .surface import IceSurface
 from .solver import IceSheetModel
 from .grid import GridSurface, solve_surface_grid
+from .tau import tau_from_classes
+from . import calibrate
 
 __all__ = [
     "constants",
@@ -31,6 +33,8 @@ __all__ = [
     "IceSheetModel",
     "GridSurface",
     "solve_surface_grid",
+    "tau_from_classes",
+    "calibrate",
     "__version__",
 ]
 
