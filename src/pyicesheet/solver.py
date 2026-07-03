@@ -55,6 +55,9 @@ class IceSheetModel:
             min_area=self.config.min_area, constants=self.constants,
             require_inside=self.config.require_inside,
             survivor_rule=self.config.survivor_rule,
+            climb_factor=self.config.climb_factor,
+            spacing_growth=self.config.spacing_growth,
+            spacing_cap_factor=self.config.spacing_cap_factor,
         )
 
     # -- public ---------------------------------------------------------- #
@@ -124,7 +127,11 @@ class IceSheetModel:
             children = self.manager.advance(contour, target)
             for child in children:
                 _accumulate(child, xs, ys, Es)
-                stack.append((child, step + 1))
+                # Physically-based stopping: only keep marching a contour that can
+                # climb another interval (see ContourManager.can_advance). This
+                # replaces the resolution-scaled area cutoff.
+                if self.manager.can_advance(child.polygon, child.level):
+                    stack.append((child, step + 1))
             self._report(len(xs), target)
 
     def _report(self, n_samples, target):

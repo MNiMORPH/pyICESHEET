@@ -70,34 +70,58 @@ class Contour:
 class ContourManager:
     """Advance contours inward, delegating divide/dome topology to GEOS.
 
+    Physically-based thinning and stopping (near the summit)
+    -------------------------------------------------------
+    As flowlines converge toward an ice divide, the surface flattens: gaining one
+    contour interval requires a horizontal distance of the Nye length
+    ``L = interval * H / Hf`` (thickness ``H``, stress length ``Hf = tau/(rho g)``).
+    This single length scale drives two resolution-independent behaviours:
+
+    * **Stopping.** A contour whose equivalent radius ``sqrt(area/pi)`` is smaller
+      than ``climb_factor * L`` cannot climb another interval — it is the summit —
+      so it is not advanced further. This replaces the original resolution-scaled
+      ``4*spacing**2`` area cutoff, which made the summit height depend on the
+      input spacing.
+    * **Thinning.** Where ``L`` is large (flat interior) the surface is smooth over
+      that scale, so the contour is resampled at ``spacing_growth * L`` (clamped
+      between the base ``spacing`` and ``spacing_cap_factor * spacing``) — far
+      fewer flowlines are integrated in the flat interior, full resolution is kept
+      at the steep margins.
+
     Parameters
     ----------
     integrator : FlowlineIntegrator
     spacing : float
-        Target along-contour point spacing (m).
+        Base (finest) along-contour point spacing (m), used near steep margins.
     elevation_interval : float
         Elevation increment between contours (m).
     min_area : float, optional
-        Discard advanced polygons smaller than this (m^2); default
-        ``4 * spacing**2`` (a few points' worth).
+        Numerical floor: discard degenerate polygons below this area (m^2);
+        default ``spacing**2``. The real stopping is the physical Nye criterion.
     constants : PhysicalConstants, optional
     require_inside : bool, optional
-        If True (default), reject advanced points that fall outside the parent
-        contour polygon (a flowline should march inward, not escape).
-    survivor_rule : {"geos"}, optional
-        How converging-flowline crossings are resolved. Only ``"geos"`` (GEOS
-        make_valid) is implemented; the original ICESHEET distance-rule
-        ("shorter flowline wins") is a planned configurable alternative.
+        Reject advanced points that fall outside the parent contour polygon.
+    survivor_rule : {"geos", "distance"}, optional
+        How converging-flowline crossings are resolved (GEOS make_valid, or the
+        ICESHEET motorcycle-graph distance-rule).
+    climb_factor : float, optional
+        Stop advancing a contour when ``sqrt(area/pi) < climb_factor * L``.
+    spacing_growth : float, optional
+        Interior spacing target as a fraction of the Nye length ``L``.
+    spacing_cap_factor : float, optional
+        Maximum interior spacing as a multiple of the base ``spacing``.
     """
 
     def __init__(self, integrator: FlowlineIntegrator, spacing: float,
                  elevation_interval: float, min_area: float | None = None,
                  constants: PhysicalConstants = DEFAULT_CONSTANTS,
-                 require_inside: bool = True, survivor_rule: str = "geos"):
+                 require_inside: bool = True, survivor_rule: str = "geos",
+                 climb_factor: float = 1.0, spacing_growth: float = 0.5,
+                 spacing_cap_factor: float = 8.0):
         self.integrator = integrator
         self.spacing = float(spacing)
         self.elevation_interval = float(elevation_interval)
-        self.min_area = (4.0 * spacing ** 2) if min_area is None else float(min_area)
+        self.min_area = (spacing ** 2) if min_area is None else float(min_area)
         self.constants = constants
         self.require_inside = require_inside
         if survivor_rule not in ("geos", "distance"):
@@ -105,6 +129,39 @@ class ContourManager:
                 f"survivor_rule={survivor_rule!r}: expected 'geos' or 'distance'"
             )
         self.survivor_rule = survivor_rule
+        self.climb_factor = float(climb_factor)
+        self.spacing_growth = float(spacing_growth)
+        self.spacing_cap_factor = float(spacing_cap_factor)
+
+    # -- physically-based length scale, stopping, thinning --------------- #
+
+    def _nye_length(self, poly, level):
+        """Local Nye length ``L = interval * H / Hf`` and thickness at ``poly``.
+
+        Sampled at an interior point of the contour. Returns ``(H, L)``.
+        """
+        p = poly.representative_point()
+        B = float(self.integrator.bed.value(p.x, p.y))
+        H = float(level) - B
+        tau = float(self.integrator.tau.value(p.x, p.y))
+        hf = tau / self.constants.rho_g
+        L = (self.elevation_interval * H / hf) if hf > 0 else float("inf")
+        return H, L
+
+    def can_advance(self, poly, level):
+        """Whether a contour at ``level`` can physically climb another interval."""
+        H, L = self._nye_length(poly, level)
+        if H <= self.integrator.min_thickness:
+            return False
+        radius = (poly.area / np.pi) ** 0.5
+        return radius >= self.climb_factor * L
+
+    def _effective_spacing(self, poly, level):
+        """Interior-adaptive point spacing: coarsen toward the Nye scale."""
+        _H, L = self._nye_length(poly, level)
+        eff = self.spacing_growth * L
+        eff = max(self.spacing, eff)
+        return min(eff, self.spacing_cap_factor * self.spacing)
 
     def advance(self, contour: Contour, target: float):
         """Advance ``contour`` to elevation ``target``; return new contour(s).
@@ -132,7 +189,8 @@ class ContourManager:
         for poly in polys:
             if poly.exterior is None or poly.area < self.min_area:
                 continue
-            children.append(Contour.build(poly, nx, ny, pE, target, self.spacing))
+            eff = self._effective_spacing(poly, target)
+            children.append(Contour.build(poly, nx, ny, pE, target, eff))
         return children
 
     # -- internals ------------------------------------------------------- #

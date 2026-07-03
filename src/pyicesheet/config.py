@@ -38,7 +38,16 @@ class ModelConfig:
     rtol, atol : float
         Flowline integrator tolerances.
     min_area : float or None
-        Discard advanced polygons below this area (m^2); None -> 4*spacing^2.
+        Numerical floor on polygon area (m^2); None -> spacing^2. The real
+        summit stopping is the physical Nye criterion below.
+    climb_factor : float
+        Physical stopping: a contour stops advancing when its equivalent radius
+        drops below climb_factor * (Nye length L = interval*H/Hf). See
+        ContourManager and docs/design-note-04.
+    spacing_growth : float
+        Interior point spacing target as a fraction of the Nye length L.
+    spacing_cap_factor : float
+        Maximum interior spacing as a multiple of the base spacing.
     constants : PhysicalConstants
     """
 
@@ -52,4 +61,7 @@ class ModelConfig:
     rtol: float = 1e-8
     atol: float = 1e-6
     min_area: float | None = None
+    climb_factor: float = 1.0
+    spacing_growth: float = 0.5
+    spacing_cap_factor: float = 8.0
     constants: PhysicalConstants = field(default=DEFAULT_CONSTANTS)
