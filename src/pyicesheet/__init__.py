@@ -16,6 +16,7 @@ from .flowline import FlowlineIntegrator
 from .contour import Contour, ContourManager
 from .surface import IceSurface
 from .solver import IceSheetModel
+from .grid import GridSurface, solve_surface_grid
 
 __all__ = [
     "constants",
@@ -28,6 +29,8 @@ __all__ = [
     "ContourManager",
     "IceSurface",
     "IceSheetModel",
+    "GridSurface",
+    "solve_surface_grid",
     "__version__",
 ]
 
