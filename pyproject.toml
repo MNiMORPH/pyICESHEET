@@ -1,0 +1,55 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pyICESHEET"
+version = "0.0.1.dev0"
+description = "Pythonic, GIS-enabled port of Evan Gowan's ICESHEET: equilibrium perfectly-plastic ice-sheet surface reconstruction from a basal shear-stress field and a mapped ice margin."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "GPL-3.0-only" }
+authors = [
+    { name = "Andrew D. Wickert" },
+]
+maintainers = [
+    { name = "Andrew D. Wickert" },
+]
+keywords = ["ice sheet", "glaciology", "perfectly plastic", "paleo", "GRASS GIS", "reconstruction"]
+classifiers = [
+    "Development Status :: 2 - Pre-Alpha",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
+    "Programming Language :: Python :: 3",
+    "Topic :: Scientific/Engineering",
+]
+dependencies = [
+    "numpy>=1.23",
+    "scipy>=1.9",
+    "shapely>=2.0",
+]
+
+[project.optional-dependencies]
+# Geospatial I/O (raster/vector ingest + rasterization of vector shear stress).
+gis = [
+    "rasterio>=1.3",
+    "geopandas>=0.12",
+]
+# CSDMS Basic Model Interface (external adapter).
+bmi = [
+    "bmipy>=2.0",
+]
+test = [
+    "pytest>=7.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/MNiMORPH/pyICESHEET"
+Repository = "https://github.com/MNiMORPH/pyICESHEET"
+"Original ICESHEET (Fortran)" = "https://doi.org/10.5194/gmd-9-1673-2016"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

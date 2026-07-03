@@ -1,0 +1,37 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.pytest_cache/
+.ipynb_checkpoints/
+*.so
+
+# Virtual environments
+.venv/
+venv/
+
+# Editors / OS
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# Large / downloaded data (Greenland bed DEM etc. — not redistributed)
+*.nc
+*.grd
+*.tif
+*.tiff
+data/
+scratch/
+
+# Fortran reference build artifacts
+*.o
+*.mod
+
+# Model run outputs
+contours*.txt
+oversample_points.txt
+*.out
