@@ -74,27 +74,60 @@ So the cliff is the Fortran's **polygon rejection**, not the divide-placement
 crossover rule. (Andy's original stress-integral hypothesis and my own
 motorcycle-graph hypothesis were both wrong; the evidence points to rejection.)
 
-## Implication for the goal (understand Gowan, but hit reality)
+## Correction — the coarse comparison was resolution-confounded
 
-Reproducing Gowan is the *check*; matching reality is the *goal*. Here they point
-in opposite directions: the Fortran's rejection makes it **under-build** the
-interior badly (95k vs 582k km² observed above 2500 m; summit 2800 vs 3233 m),
-while pyICESHEET **over-builds** modestly (877k; 3600 m) and is the closer of the
-two to observed Greenland. So we do **not** want to port the Fortran's aggressive
-rejection wholesale — it would move us away from reality.
+**The analysis above was run at deliberately coarse settings (40 km spacing,
+400 m interval, 15 km-simplified margin) for speed, and that confounded the
+conclusion.** Two facts, established afterward:
 
-The residual over-build (pyICESHEET 3600 vs observed 3233, ~11 %) is consistent
-with the perfectly-plastic assumption itself: real ice with basal sliding / soft
-beds is lower and flatter than a plastic sheet at these shear-stress values.
-Closing that gap is a matter of **shear-stress calibration and model physics**
-(as Gowan does for paleo reconstructions), not the contour algorithm. A milder,
-physically-motivated contour-validity check (rejecting only genuinely folded
-contours, not over-extended ones) is a candidate refinement — but reality, not the
-Fortran's summit, is the target it should be tuned against.
+1. The Greenland shear-stress field is **tuned so that Gowan's ICESHEET reproduces
+   the observed surface** (per E. Gowan / A. Wickert). So the field is calibrated
+   *against the Fortran*, and the Fortran run — done correctly — should match
+   reality, not fall short of it.
+2. Re-running the **Fortran at fine settings (5 km spacing, 100 m interval)**
+   gives a summit of **3300 m vs observed 3232 m** — it *does* reproduce reality.
+   The coarse run's 2800 m was a resolution artifact (a simplified margin and
+   400 m steps produce more folded contours, so `check_polygon2` rejects far more
+   of the interior). The rejection *cliff* is real but its severity is
+   resolution-dependent.
+
+Hypsometry, area (10³ km²) above elevation:
+
+| elevation | observed | Fortran fine (5 km) | Fortran coarse (40 km) | pyICESHEET coarse |
+|---|---|---|---|---|
+| > 2500 m | 581 | 714 | 96 | 878 |
+| > 3000 m | 110 | 221 | 0 | 411 |
+| max | 3232 | 3300 | 2800 | 3600 |
+
+So the earlier claim that "the Fortran under-builds reality and pyICESHEET is
+closer" is **retracted**: at proper resolution the Fortran ~matches reality. Both
+codes' coarse results merely bracketed reality by artifact.
+
+Two things remain genuinely open:
+
+- The fine Fortran still *over*-builds the interior somewhat (714k vs 581k km²
+  above 2500 m). This is likely because our reproduction of the τ field
+  (rasterize + Gaussian smooth) does not exactly match Gowan's original grid
+  pipeline (`nearest_int`/`reduce_dem`) that the values were tuned with — i.e. we
+  are not running on *precisely* the tuned field.
+- **Does pyICESHEET converge to reality at fine resolution?** Untested: pyICESHEET
+  is too slow to run at 5 km spacing today. This makes solver performance the
+  critical path for the reality goal, not the contour-rejection algorithm.
+
+## Note on the model physics
+
+The governing balance `τ_b = ρ_i g H |∇S|` is a **force balance** — the left side
+is the gravitational driving stress — and is independent of the ice deformation
+mechanism (internal creep, basal sliding, till). It is *not* a perfectly-plastic
+rheology; ICESHEET with a spatially variable τ_b is a **prescribed-basal-shear-
+stress** model. Its one approximation is that all driving stress is balanced by
+basal drag (the shallow-ice / local balance, neglecting longitudinal and lateral
+stress-gradient terms), which is least accurate at divides — but a τ_b tuned to
+reality absorbs that. Earlier references in this project to a "perfectly-plastic
+vs. real ice" gap were mis-stated on this point.
 
 The `survivor_rule="distance"` option remains available as a faithful reproduction
-of Gowan's crossover handling (for *understanding* the original), with GEOS the
-default (closer to reality).
+of Gowan's crossover handling; GEOS is the default.
 
 ## What this is NOT
 
