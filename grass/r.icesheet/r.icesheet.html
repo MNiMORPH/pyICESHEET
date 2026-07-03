@@ -1,0 +1,62 @@
+<h2>DESCRIPTION</h2>
+
+<em>r.icesheet</em> reconstructs the <b>equilibrium</b> surface of a
+perfectly-plastic ice sheet from a basal shear-stress field and a mapped ice
+margin, using <a href="https://github.com/MNiMORPH/pyICESHEET">pyICESHEET</a> (a
+Python port of Evan J. Gowan's ICESHEET). There is no time evolution: given the
+margin, the basal shear stress, and the bed, the ice-surface elevation is fully
+determined by the stress balance
+<em>tau_b = rho_i g H |grad S|</em>.
+
+Flowlines are integrated inward from the margin, raising the surface according to
+the perfectly-plastic slope relation until each successive elevation contour is
+reached; where flowlines converge, ice divides form, and where contours pinch,
+domes and saddles separate.
+
+<h2>NOTES</h2>
+
+<ul>
+<li>The <b>shear_stress</b> raster should be <b>pre-smoothed</b> (for example with
+<em>r.resamp.bspline</em>): the solver differentiates the field, so sharp
+polygon-edge steps must be smoothed first. This smoothing is intentionally a
+separate step, not part of the model. If the shear stress originates as polygons,
+rasterize it (<em>v.to.rast</em>) and then smooth it.</li>
+<li>All inputs must share the same projected (metric) coordinate system, and the
+computational region defines the working grid: set it with <em>g.region</em>
+before running. Coarser regions and larger <b>spacing</b> run faster.</li>
+<li>pyICESHEET and its dependencies (NumPy, SciPy, Shapely) must be installed in
+the Python interpreter used by GRASS.</li>
+</ul>
+
+<h2>EXAMPLE</h2>
+
+<div class="code"><pre>
+# Rasterize and smooth a polygon shear-stress map
+v.to.rast input=shear_stress output=tau_raw use=attr attribute_column=shear_stre
+r.resamp.bspline input=tau_raw output=tau method=bicubic
+
+g.region raster=bed -p
+r.icesheet bed=bed shear_stress=tau margin=ice_margin \
+    surface=ice_surface thickness=ice_thickness \
+    spacing=5000 interval=100 max_elevation=4000
+</pre></div>
+
+<h2>REFERENCES</h2>
+
+<ul>
+<li>Gowan, E.J., et al. (2016). ICESHEET 1.0: a program to produce paleo-ice
+sheet reconstructions with minimal assumptions. <em>Geoscientific Model
+Development</em>, 9(5), 1673&ndash;1682.
+<a href="https://doi.org/10.5194/gmd-9-1673-2016">doi:10.5194/gmd-9-1673-2016</a></li>
+</ul>
+
+<h2>SEE ALSO</h2>
+
+<em>
+<a href="r.resamp.bspline.html">r.resamp.bspline</a>,
+<a href="v.to.rast.html">v.to.rast</a>
+</em>
+
+<h2>AUTHORS</h2>
+
+pyICESHEET developers. Reconstruction method and algorithm by Evan J. Gowan.
