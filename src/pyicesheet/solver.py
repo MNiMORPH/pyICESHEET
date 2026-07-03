@@ -58,6 +58,7 @@ class IceSheetModel:
             climb_factor=self.config.climb_factor,
             spacing_growth=self.config.spacing_growth,
             spacing_cap_factor=self.config.spacing_cap_factor,
+            clip_convergence=self.config.clip_convergence,
         )
 
     # -- public ---------------------------------------------------------- #

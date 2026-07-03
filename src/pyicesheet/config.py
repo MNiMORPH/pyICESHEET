@@ -48,6 +48,12 @@ class ModelConfig:
         Interior point spacing target as a fraction of the Nye length L.
     spacing_cap_factor : float
         Maximum interior spacing as a multiple of the base spacing.
+    clip_convergence : bool
+        Clip the advancing front so it cannot extend past where converging
+        flowlines meet (the ice divide / medial axis). GEOS make_valid alone
+        takes the outer envelope of a crossed front, over-enclosing area beyond
+        the divide (a spurious summit plateau); this trims it. See
+        ContourManager and docs/design-note-04.
     constants : PhysicalConstants
     """
 
@@ -64,4 +70,5 @@ class ModelConfig:
     climb_factor: float = 1.0
     spacing_growth: float = 0.5
     spacing_cap_factor: float = 8.0
+    clip_convergence: bool = True
     constants: PhysicalConstants = field(default=DEFAULT_CONSTANTS)

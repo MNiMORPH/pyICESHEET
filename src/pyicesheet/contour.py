@@ -23,7 +23,9 @@ from scipy.spatial import cKDTree
 from shapely.geometry import Polygon, Point
 from shapely.prepared import prep
 
-from ._geometry import resample_ring, inward_normals, clean_polygon
+from ._geometry import (
+    resample_ring, inward_normals, clean_polygon, polygon_components,
+)
 from .constants import DEFAULT_CONSTANTS, PhysicalConstants
 from .flowline import FlowlineIntegrator
 
@@ -110,6 +112,16 @@ class ContourManager:
         Interior spacing target as a fraction of the Nye length ``L``.
     spacing_cap_factor : float, optional
         Maximum interior spacing as a multiple of the base ``spacing``.
+    clip_convergence : bool, optional
+        Clip the advanced front so it cannot extend past where converging
+        flowlines meet (the divide / medial axis). ``make_valid`` alone takes the
+        *outer envelope* of a front whose flowlines have crossed, over-enclosing
+        area beyond the divide (a spurious summit plateau). When True (default)
+        each advanced polygon is intersected with the parent contour eroded
+        inward by the local advance distance — geometrically "advance the whole
+        parent inward by one step" — which collapses to nothing exactly where the
+        opposing fronts have crossed, removing the over-enclosure. See
+        ``docs/design-note-04``.
     """
 
     def __init__(self, integrator: FlowlineIntegrator, spacing: float,
@@ -117,7 +129,7 @@ class ContourManager:
                  constants: PhysicalConstants = DEFAULT_CONSTANTS,
                  require_inside: bool = True, survivor_rule: str = "geos",
                  climb_factor: float = 1.0, spacing_growth: float = 0.5,
-                 spacing_cap_factor: float = 8.0):
+                 spacing_cap_factor: float = 8.0, clip_convergence: bool = True):
         self.integrator = integrator
         self.spacing = float(spacing)
         self.elevation_interval = float(elevation_interval)
@@ -132,6 +144,7 @@ class ContourManager:
         self.climb_factor = float(climb_factor)
         self.spacing_growth = float(spacing_growth)
         self.spacing_cap_factor = float(spacing_cap_factor)
+        self.clip_convergence = bool(clip_convergence)
 
     # -- physically-based length scale, stopping, thinning --------------- #
 
@@ -185,6 +198,9 @@ class ContourManager:
         # GEOS make_valid still runs: it splits pinched lobes (domes/saddles) and
         # cleans any residual self-intersection among the survivors.
         polys = clean_polygon(list(zip(nx, ny)), min_area=self.min_area)
+        if self.clip_convergence:
+            polys = self._clip_to_advance(polys, contour.polygon,
+                                          ox, oy, nx, ny, advanced)
         children = []
         for poly in polys:
             if poly.exterior is None or poly.area < self.min_area:
@@ -192,6 +208,39 @@ class ContourManager:
             eff = self._effective_spacing(poly, target)
             children.append(Contour.build(poly, nx, ny, pE, target, eff))
         return children
+
+    def _clip_to_advance(self, polys, parent, ox, oy, nx, ny, advanced):
+        """Clip advanced polygons to the parent eroded by the advance distance.
+
+        ``make_valid`` on the advanced ring keeps the *outer envelope* where
+        converging flowlines have crossed, over-enclosing area past the divide
+        (a spurious plateau near ice divides). Eroding the parent contour inward
+        by the local advance distance ``d`` (``parent.buffer(-d)``) is exactly
+        "advance the whole parent inward by one step": it reproduces the true
+        front where fronts have *not* crossed, and collapses to nothing exactly
+        where opposing fronts have crossed — so intersecting the ``make_valid``
+        result with it removes only the over-enclosed fold-over.
+
+        ``d`` is the median of the per-point flowline advance distances this
+        step (robust to the odd long flowline; on a flat bed with constant tau
+        the advance is uniform along a contour, so the choice is immaterial
+        there and matters only where the fields vary).
+        """
+        if advanced.any():
+            d = float(np.median(np.hypot(nx - ox, ny - oy)[advanced]))
+        else:
+            d = 0.0
+        if d <= 0.0:
+            return polys
+        eroded = parent.buffer(-d)
+        if eroded.is_empty:
+            return []
+        clipped = []
+        for poly in polys:
+            clipped.extend(
+                polygon_components(poly.intersection(eroded), self.min_area)
+            )
+        return clipped
 
     # -- internals ------------------------------------------------------- #
 
