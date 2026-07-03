@@ -100,10 +100,9 @@ class ContourManager:
         self.min_area = (4.0 * spacing ** 2) if min_area is None else float(min_area)
         self.constants = constants
         self.require_inside = require_inside
-        if survivor_rule != "geos":
-            raise NotImplementedError(
-                f"survivor_rule={survivor_rule!r}: only 'geos' is implemented; "
-                "the ICESHEET distance-rule is a planned alternative"
+        if survivor_rule not in ("geos", "distance"):
+            raise ValueError(
+                f"survivor_rule={survivor_rule!r}: expected 'geos' or 'distance'"
             )
         self.survivor_rule = survivor_rule
 
@@ -111,46 +110,126 @@ class ContourManager:
         """Advance ``contour`` to elevation ``target``; return new contour(s).
 
         Points already at/above ``target`` are kept in place; the rest are
-        integrated up their flowlines. The advanced ring is cleaned with GEOS,
-        which resolves crossings and splits pinched lobes; each resulting polygon
-        is resampled into a new :class:`Contour`.
+        integrated up their flowlines. Converging flowlines are then resolved by
+        the chosen ``survivor_rule`` (GEOS ``make_valid``, or the ICESHEET
+        motorcycle-graph distance-rule), and pinched lobes are split; each
+        resulting polygon is resampled into a new :class:`Contour`.
         """
-        px, py, pE = self._advance_points(contour, target)
-        if len(px) < 3:
+        ox, oy, nx, ny, pE, advanced = self._advance_points(contour, target)
+        if len(nx) < 3:
             return []
-        polys = clean_polygon(list(zip(px, py)), min_area=self.min_area)
+
+        if self.survivor_rule == "distance":
+            keep = _prune_crossing_flowlines(ox, oy, nx, ny, advanced)
+            nx, ny, pE = nx[keep], ny[keep], pE[keep]
+            if len(nx) < 3:
+                return []
+
+        # GEOS make_valid still runs: it splits pinched lobes (domes/saddles) and
+        # cleans any residual self-intersection among the survivors.
+        polys = clean_polygon(list(zip(nx, ny)), min_area=self.min_area)
         children = []
         for poly in polys:
             if poly.exterior is None or poly.area < self.min_area:
                 continue
-            children.append(
-                Contour.build(poly, px, py, pE, target, self.spacing)
-            )
+            children.append(Contour.build(poly, nx, ny, pE, target, self.spacing))
         return children
 
     # -- internals ------------------------------------------------------- #
 
     def _advance_points(self, contour: Contour, target: float):
-        """Advance each contour point to ``target`` (or keep it if already up)."""
+        """Advance each contour point to ``target`` (or keep it if already up).
+
+        Returns parallel arrays ``(old_x, old_y, new_x, new_y, E, advanced)`` for
+        the surviving points: ``advanced`` flags points that were integrated up a
+        flowline (vs. kept in place because already at/above ``target``). The
+        old→new pairing is the flowline segment used by the distance-rule.
+        """
         prepared = prep(contour.polygon) if self.require_inside else None
-        px, py, pE = [], [], []
+        ox, oy, nx, ny, pE, adv = [], [], [], [], [], []
         direction = contour.direction
         for i in range(len(contour)):
-            Ei = float(contour.E[i])
+            xi, yi, Ei = float(contour.x[i]), float(contour.y[i]), float(contour.E[i])
             if Ei >= target - 1e-9:
-                px.append(float(contour.x[i]))
-                py.append(float(contour.y[i]))
-                pE.append(Ei)
+                ox.append(xi); oy.append(yi); nx.append(xi); ny.append(yi)
+                pE.append(Ei); adv.append(False)
                 continue
             step = self.integrator.step_to_elevation(
-                float(contour.x[i]), float(contour.y[i]), float(direction[i]),
-                Ei, target, q0=0.0,
+                xi, yi, float(direction[i]), Ei, target, q0=0.0,
             )
             if not step.reached_target:
                 continue  # flowline stalled (too thin / singularity): drop point
             if prepared is not None and not prepared.contains(Point(step.x, step.y)):
                 continue  # escaped the parent contour: drop
-            px.append(step.x)
-            py.append(step.y)
-            pE.append(target)
-        return px, py, pE
+            ox.append(xi); oy.append(yi); nx.append(step.x); ny.append(step.y)
+            pE.append(target); adv.append(True)
+        return (np.array(ox), np.array(oy), np.array(nx), np.array(ny),
+                np.array(pE), np.array(adv, dtype=bool))
+
+
+def _prune_crossing_flowlines(ox, oy, nx, ny, advanced):
+    """Motorcycle-graph pruning: eliminate the shorter of each crossing pair.
+
+    Reproduces the original ICESHEET rule: where two flowline segments (old
+    contour point -> advanced point) cross, the line with the *shorter* distance
+    from its start to the crossover is eliminated, processing crossings in order
+    of increasing distance so a line pruned by one crossing auto-resolves its
+    others. Only advanced points can be pruned; kept points always survive.
+
+    Returns a boolean survivor mask aligned to the input arrays.
+    """
+    from shapely.geometry import LineString
+    from shapely.strtree import STRtree
+
+    n = len(nx)
+    keep = np.ones(n, dtype=bool)
+    idx_adv = np.where(advanced)[0]
+    if len(idx_adv) < 2:
+        return keep
+
+    segs = [LineString([(ox[i], oy[i]), (nx[i], ny[i])]) for i in idx_adv]
+    tree = STRtree(segs)
+
+    crossings = []          # (distance_to_crossover, global_line_index, crossing_id)
+    other_of = {}           # crossing_id -> (line_a_global, line_b_global)
+    cid = 0
+    for a_local, i in enumerate(idx_adv):
+        for b_local in tree.query(segs[a_local]):
+            if b_local <= a_local:
+                continue
+            if not segs[a_local].crosses(segs[b_local]):
+                continue
+            pt = segs[a_local].intersection(segs[b_local])
+            if pt.geom_type != "Point":
+                continue
+            j = idx_adv[b_local]
+            di = float(np.hypot(pt.x - ox[i], pt.y - oy[i]))
+            dj = float(np.hypot(pt.x - ox[j], pt.y - oy[j]))
+            other_of[cid] = (i, j)
+            crossings.append((di, i, cid))
+            crossings.append((dj, j, cid))
+            cid += 1
+
+    if not crossings:
+        return keep
+
+    crossings.sort(key=lambda e: e[0])
+    eliminated = set()
+    resolved = set()
+    for _d, line, c in crossings:
+        if c in resolved:
+            continue
+        if line in eliminated:
+            resolved.add(c)
+            continue
+        a, b = other_of[c]
+        other = b if line == a else a
+        if other in eliminated:
+            resolved.add(c)          # the other line already gone; keep this one
+            continue
+        eliminated.add(line)         # shorter line (smallest distance) is pruned
+        resolved.add(c)
+
+    for i in eliminated:
+        keep[i] = False
+    return keep

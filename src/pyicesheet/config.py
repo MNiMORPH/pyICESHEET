@@ -29,6 +29,12 @@ class ModelConfig:
         Stop marching once contours exceed this surface elevation (m).
     require_inside : bool
         Reject advanced flowline points that escape the parent contour.
+    survivor_rule : {"geos", "distance"}
+        How converging flowlines are resolved near ice divides. "geos" (default)
+        lets GEOS make_valid resolve crossings (smoother, closer to observed);
+        "distance" applies the original ICESHEET motorcycle-graph pruning
+        (reproduces Gowan's more aggressive interior pruning). See
+        docs/design-note-03.
     rtol, atol : float
         Flowline integrator tolerances.
     min_area : float or None
@@ -42,6 +48,7 @@ class ModelConfig:
     min_elevation: float = 0.0
     max_elevation: float = 5000.0
     require_inside: bool = True
+    survivor_rule: str = "geos"
     rtol: float = 1e-8
     atol: float = 1e-6
     min_area: float | None = None

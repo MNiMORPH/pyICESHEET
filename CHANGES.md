@@ -43,6 +43,9 @@ Original ICESHEET (Fortran) is GPL-3.0; pyICESHEET inherits GPL-3.0.
 - `bmi.IceSheetBMI`: equilibrium (single-shot) CSDMS-style adapter.
 - GRASS addon `r.icesheet`.
 - Greenland example (bed = BedMachine v6; bundled margin + shear-stress polygons).
+- `ModelConfig.survivor_rule`: divide handling — "geos" (default, GEOS make_valid;
+  closer to observed) or "distance" (the original ICESHEET motorcycle-graph
+  crossover pruning). See docs/design-note-03.
 
 ### Known limitations
 - **Performance.** The solve integrates one adaptive-RK flowline per contour point

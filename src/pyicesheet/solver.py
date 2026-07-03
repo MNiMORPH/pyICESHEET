@@ -54,6 +54,7 @@ class IceSheetModel:
             self.integrator, self.config.spacing, self.config.elevation_interval,
             min_area=self.config.min_area, constants=self.constants,
             require_inside=self.config.require_inside,
+            survivor_rule=self.config.survivor_rule,
         )
 
     # -- public ---------------------------------------------------------- #

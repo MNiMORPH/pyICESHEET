@@ -50,24 +50,51 @@ The Fortran badly *under*-builds the interior (95k vs 582k km² above 2500 m; su
 2800 vs 3233 m). pyICESHEET *over*-builds (878k; 3600 m, capped) but is much closer
 to observed. Reality lies between them.
 
-## Interpretation (leading hypothesis, not yet proven)
+## Interpretation — confirmed by experiment
 
 The divergence is in the **interior contour geometry near the ice divide**, not the
-per-flowline physics. As flowlines converge toward the divide, the original
-ICESHEET prunes them aggressively — the motorcycle-graph crossover rule (shorter
-flowline wins) and the `check_polygon2` rejection of over-extended contours — which
-shrinks the contour rapidly and halts it (the cliff). pyICESHEET instead resolves
-converging fronts with GEOS `make_valid`, which preserves more contour area, so its
-contours march farther inward and build a higher summit.
+per-flowline physics. Two candidate Fortran pruning mechanisms were tested:
 
-This is exactly the GEOS-vs-motorcycle-graph divide-placement difference flagged in
-Design Note 02 §2 as a validation item.
+**(a) The motorcycle-graph crossover rule ("shorter flowline wins") — RULED OUT.**
+Implemented as `ContourManager(survivor_rule="distance")` and run on Greenland: it
+made essentially no difference (area above 2500 m: 877k km² with GEOS vs 883k with
+the distance-rule; both summits capped at 3600 m). On a clean radial cap it does
+lower the apex slightly (2000 vs 2200 m), but it is not what caps the Fortran on
+Greenland.
 
-**To confirm it:** implement the configurable distance-rule ("shorter flowline
-wins") survivor selection in `ContourManager` (currently
-`survivor_rule="geos"` only) and check whether it collapses pyICESHEET's summit
-toward the Fortran's. If it does, the mechanism is confirmed and becomes a user
-choice: GEOS (smoother, closer to observed) vs distance-rule (reproduces Gowan).
+**(b) The `check_polygon2` rejection of over-extended contours — CONFIRMED.**
+The Fortran writes discarded contours to `contours-rejected.txt`. On this Greenland
+run it rejects a growing number of contours with elevation — 20 at 2000 m, 23 at
+2400 m, **35 at 2800 m, 8 at 3200 m**. The rejection peaks exactly where the
+Fortran's accepted surface caps (2800 m): the Fortran *tries* to build to 3200 m
+but rejects those interior contours. pyICESHEET has no such rejection (only a
+minimum-area filter), so it keeps building to 3600 m.
+
+So the cliff is the Fortran's **polygon rejection**, not the divide-placement
+crossover rule. (Andy's original stress-integral hypothesis and my own
+motorcycle-graph hypothesis were both wrong; the evidence points to rejection.)
+
+## Implication for the goal (understand Gowan, but hit reality)
+
+Reproducing Gowan is the *check*; matching reality is the *goal*. Here they point
+in opposite directions: the Fortran's rejection makes it **under-build** the
+interior badly (95k vs 582k km² observed above 2500 m; summit 2800 vs 3233 m),
+while pyICESHEET **over-builds** modestly (877k; 3600 m) and is the closer of the
+two to observed Greenland. So we do **not** want to port the Fortran's aggressive
+rejection wholesale — it would move us away from reality.
+
+The residual over-build (pyICESHEET 3600 vs observed 3233, ~11 %) is consistent
+with the perfectly-plastic assumption itself: real ice with basal sliding / soft
+beds is lower and flatter than a plastic sheet at these shear-stress values.
+Closing that gap is a matter of **shear-stress calibration and model physics**
+(as Gowan does for paleo reconstructions), not the contour algorithm. A milder,
+physically-motivated contour-validity check (rejecting only genuinely folded
+contours, not over-extended ones) is a candidate refinement — but reality, not the
+Fortran's summit, is the target it should be tuned against.
+
+The `survivor_rule="distance"` option remains available as a faithful reproduction
+of Gowan's crossover handling (for *understanding* the original), with GEOS the
+default (closer to reality).
 
 ## What this is NOT
 
