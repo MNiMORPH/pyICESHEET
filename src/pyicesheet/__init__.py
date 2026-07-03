@@ -8,7 +8,8 @@ See ``docs/`` for the design notes describing the physics and architecture.
 """
 
 from . import constants
+from . import physics
 
-__all__ = ["constants", "__version__"]
+__all__ = ["constants", "physics", "__version__"]
 
 __version__ = "0.0.1.dev0"
