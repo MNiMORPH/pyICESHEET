@@ -49,10 +49,20 @@ Original ICESHEET (Fortran) is GPL-3.0; pyICESHEET inherits GPL-3.0.
   per elevation interval; a full Greenland reconstruction currently takes several
   minutes. Loosening integrator tolerances, vectorizing field sampling, and
   simplifying the (very detailed) margin are the obvious next optimizations.
-- The direct method-to-method comparison against the original Fortran ICESHEET on
-  Greenland is scaffolded (`examples/greenland/make_fortran_reference.py`) but not
-  yet completed/verified; the current Greenland validation is against the observed
-  BedMachine surface plus the analytic unit tests.
+- Summit maxima differ between the two codes on Greenland (Fortran ~2800 m vs
+  pyICESHEET ~3600 m, which reached its elevation cap); under investigation —
+  likely divide placement (GEOS vs the original motorcycle-graph) and/or
+  integrator tolerance.
+
+### Validation
+- Analytic Nye parabola (unit tests), a radial dome, and a dumbbell divide split.
+- **Fortran ICESHEET method-to-method comparison.** The Fortran binary-grid format
+  is reproduced and verified on the analytic circular cap (Fortran matches Nye to
+  RMS 2.7 m, radially symmetric to 0.1 m). On Greenland, on identical fields,
+  Fortran − pyICESHEET is mean +65 m / RMS 259 m / median 152 m — agreement to
+  ~6–10 % on a 2–3 km ice sheet.
+- Greenland reconstruction vs the observed BedMachine surface: mean +165 m,
+  RMS 373 m (the positive bias is the expected perfectly-plastic signature).
 
 ### Notes on intended improvements over the Fortran
 These are deliberate changes from the original, documented as they land:
