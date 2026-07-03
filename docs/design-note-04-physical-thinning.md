@@ -79,12 +79,26 @@ Greenland (same tuned τ field):
 The summit now **decreases toward reality** with finer resolution (3750 → 3600),
 where before it diverged upward, and the 20 km run is ~2–3× faster than before.
 
-## What remains
+## What remains — the interior over-build (diagnosed)
 
-The Greenland reconstruction still over-builds vs observed (3600 vs 3232;
-845k vs 581k km² above 2500 m). This residual is **localized** — a spurious high
-dome in east Greenland over the coastal mountains, where thin ice over high bed
-gives a small `L`, so the stopping does not bite. That is a **divide-placement /
-convergence** issue in that region (how the fronts from the fjorded east coast
-merge), separate from the resolution-independence fixed here. It is the next thread
-for the reality goal, along with pushing the resolution finer (now tractable).
+The reconstruction still over-builds vs observed, and this residual is **not**
+resolution-dependent (summit 3600 m at both 20 and 10 km). Investigation:
+
+- It is **interior over-thickening of real grounded ice**, ~+230 m more than the
+  fine Fortran (which is itself +131 m over observed from the τ/model). 79 % of the
+  largest over-builds are over grounded ice, not ice-free terrain.
+- **Refuted: fjord / margin over-extension.** The margin encloses the same ~2 % of
+  ice-free area at every resample spacing (40 km → 2 km), so coarse spacing is not
+  bulging the ice out over the fjorded east coast.
+- **Confirmed mechanism: divide over-enclosure.** Area above 2500 m is 821k km²
+  (pyICESHEET) vs 714k (fine Fortran) vs 581k (observed). pyICESHEET encloses ~107k
+  km² *more* than the Fortran at high elevation because GEOS `make_valid` takes the
+  outer envelope of converging fronts (divides placed further inward), whereas the
+  Fortran's `check_polygon2` *rejects* folded/over-extended contours and trims the
+  front. Over ~15 contour levels this compounds into the ~230 m excess.
+
+The fix is to **trim the front where flowlines over-converge**, rather than keep the
+whole union — a physically-motivated version of the Fortran's rejection (e.g. clip
+to where converging fronts meet / the medial axis, tuned so the reconstruction
+matches observed, not the Fortran's summit). This is the next thread for the reality
+goal.
