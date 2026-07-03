@@ -58,8 +58,17 @@ class IceSheetModel:
 
     # -- public ---------------------------------------------------------- #
 
-    def solve(self) -> IceSurface:
-        """Run the reconstruction and return the ice surface."""
+    def solve(self, progress=False) -> IceSurface:
+        """Run the reconstruction and return the ice surface.
+
+        Parameters
+        ----------
+        progress : bool or callable, optional
+            If True, print a heartbeat every 200 advanced contours. If callable,
+            it is called as ``progress(n_contours, n_samples, current_target)``.
+        """
+        self._progress = progress
+        self._n_advanced = 0
         polygons = self._margin_polygons()
         xs, ys, Es = [], [], []
         for poly in polygons:
@@ -115,6 +124,18 @@ class IceSheetModel:
             for child in children:
                 _accumulate(child, xs, ys, Es)
                 stack.append((child, step + 1))
+            self._report(len(xs), target)
+
+    def _report(self, n_samples, target):
+        self._n_advanced += 1
+        prog = getattr(self, "_progress", False)
+        if not prog:
+            return
+        if callable(prog):
+            prog(self._n_advanced, n_samples, target)
+        elif self._n_advanced % 200 == 0:
+            print(f"  [progress] {self._n_advanced} contours advanced, "
+                  f"{n_samples} samples, target {target:.0f} m", flush=True)
 
 
 def _accumulate(contour: Contour, xs, ys, Es):
