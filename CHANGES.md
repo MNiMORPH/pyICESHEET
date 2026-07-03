@@ -24,8 +24,35 @@ Original ICESHEET (Fortran) is GPL-3.0; pyICESHEET inherits GPL-3.0.
 ## [Unreleased]
 
 ### Added
-- Initial repository scaffold, design notes (physics/numerics/I/O of the Fortran;
-  the pyICESHEET architecture and flowline-crowding plan).
+- Initial repository scaffold and design notes (physics/numerics/I/O of the
+  Fortran; the pyICESHEET architecture and flowline-crowding plan).
+- `physics`: perfectly-plastic mechanics — stress/slope relations, the flowline
+  ODE right-hand side (Fisher eq. A8), the Nye analytic profile/distance, and the
+  marine-margin flotation seed. Validated against the analytic Nye parabola.
+- `fields.RasterField`: smooth (bicubic-spline) sampling with analytic gradients.
+- `margin.IceMargin`: boundary resampling and inward normals.
+- `flowline.FlowlineIntegrator`: adaptive-RK (scipy) integration of a flowline to
+  the next elevation contour, with the turning-singularity handled by an event.
+- `contour.ContourManager`: the inward-advance step, with converging-flowline
+  crossings and dome/saddle splitting delegated to GEOS `make_valid` (replacing
+  the Fortran motorcycle-graph + polygon-split machinery).
+- `solver.IceSheetModel`: seed the margin, march contours inward (recursing into
+  split lobes), accumulate the surface.
+- `surface.IceSurface`: sample cloud + gridding / GeoDataFrame export.
+- `io`: NetCDF/GeoTIFF raster adapters and vector rasterization.
+- `bmi.IceSheetBMI`: equilibrium (single-shot) CSDMS-style adapter.
+- GRASS addon `r.icesheet`.
+- Greenland example (bed = BedMachine v6; bundled margin + shear-stress polygons).
+
+### Known limitations
+- **Performance.** The solve integrates one adaptive-RK flowline per contour point
+  per elevation interval; a full Greenland reconstruction currently takes several
+  minutes. Loosening integrator tolerances, vectorizing field sampling, and
+  simplifying the (very detailed) margin are the obvious next optimizations.
+- The direct method-to-method comparison against the original Fortran ICESHEET on
+  Greenland is scaffolded (`examples/greenland/make_fortran_reference.py`) but not
+  yet completed/verified; the current Greenland validation is against the observed
+  BedMachine surface plus the analytic unit tests.
 
 ### Notes on intended improvements over the Fortran
 These are deliberate changes from the original, documented as they land:

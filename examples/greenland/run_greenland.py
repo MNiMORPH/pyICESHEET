@@ -56,11 +56,21 @@ def main():
                     help="downsample factor from the 150 m bed (33 ~ 5 km)")
     ap.add_argument("--spacing", type=float, default=15000.0)
     ap.add_argument("--interval", type=float, default=200.0)
+    ap.add_argument("--simplify", type=float, default=None,
+                    help="margin simplification tolerance [m]; default spacing/2. "
+                         "Greenland's mapped margin has ~35k fjord-scale vertices, "
+                         "far finer than a coarse reconstruction needs.")
     ap.add_argument("--out", default="greenland_recon.npz")
     args = ap.parse_args()
 
     bed_f, tau_f, _ = build_fields(args.bed, args.resolution_factor)
     margin = read_polygon(f"{SS_DIR}/outline5.shp")
+    tol = args.simplify if args.simplify is not None else args.spacing / 2.0
+    if tol > 0:
+        v0 = len(margin.exterior.coords)
+        margin = margin.simplify(tol)
+        print(f"margin simplified: {v0} -> {len(margin.exterior.coords)} vertices "
+              f"(tol {tol:.0f} m)")
 
     cfg = ModelConfig(spacing=args.spacing, elevation_interval=args.interval,
                       max_elevation=4000.0, min_thickness=1.0)
