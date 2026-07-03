@@ -38,6 +38,75 @@ from .constants import DEFAULT_CONSTANTS, PhysicalConstants
 
 __all__ = ["GridSurface", "solve_surface_grid"]
 
+_INF = 1e30
+
+try:
+    import numba
+
+    @numba.njit(cache=True, inline="always")
+    def _cell_update_jit(a, b, B, tau, h, rho_g):
+        """Coupled Godunov eikonal update at one cell (scalar)."""
+        if a >= _INF:
+            return _INF
+        C = tau * h / rho_g
+        disc1 = (a - B) * (a - B) + 4.0 * C
+        if disc1 < 0.0:
+            disc1 = 0.0
+        U1 = 0.5 * ((a + B) + np.sqrt(disc1))
+        if b >= _INF or b >= U1:
+            return U1
+        u = U1                                   # 2-D: Newton on the coupled eqn
+        for _ in range(5):
+            s = (u - a) * (u - a) + (u - b) * (u - b)
+            d = u - B
+            g = s * d * d - C * C
+            gp = (2.0 * (u - a) + 2.0 * (u - b)) * d * d + s * 2.0 * d
+            if gp != 0.0:
+                u = u - g / gp
+        return u
+
+    @numba.njit(cache=True)
+    def _fast_sweep_jit(S, bed, tau, inside, fixed, h, rho_g, tol, max_sweeps):
+        """Fast Sweeping Method: Gauss-Seidel sweeps in the 4 diagonal directions.
+
+        Converges in a handful of sweeps regardless of grid size (unlike the
+        Jacobi fast-iterative method, which is O(grid width)).
+        """
+        ny, nx = S.shape
+        for sweep in range(max_sweeps):
+            maxchange = 0.0
+            for di in (1, -1):
+                i0 = 0 if di == 1 else ny - 1
+                i1 = ny if di == 1 else -1
+                for dj in (1, -1):
+                    j0 = 0 if dj == 1 else nx - 1
+                    j1 = nx if dj == 1 else -1
+                    for i in range(i0, i1, di):
+                        for j in range(j0, j1, dj):
+                            if not inside[i, j] or fixed[i, j]:
+                                continue
+                            um = S[i - 1, j] if i > 0 else _INF
+                            up = S[i + 1, j] if i < ny - 1 else _INF
+                            lm = S[i, j - 1] if j > 0 else _INF
+                            lp = S[i, j + 1] if j < nx - 1 else _INF
+                            Uy = um if um < up else up
+                            Ux = lm if lm < lp else lp
+                            a = Ux if Ux < Uy else Uy
+                            b = Ux if Ux > Uy else Uy
+                            U = _cell_update_jit(a, b, bed[i, j], tau[i, j], h, rho_g)
+                            if U < S[i, j]:
+                                change = S[i, j] - U
+                                S[i, j] = U
+                                if change > maxchange:
+                                    maxchange = change
+            if maxchange < tol:
+                return sweep + 1
+        return max_sweeps
+
+    _HAVE_NUMBA = True
+except ImportError:                              # pragma: no cover
+    _HAVE_NUMBA = False
+
 
 @dataclass
 class GridSurface:
@@ -86,10 +155,27 @@ def _coupled_update(a, b, B, tau, h, rho_g, newton_iter=4):
 
 
 def _solve(bed, tau, inside, boundary, boundary_S, h,
-           constants=DEFAULT_CONSTANTS, min_thickness=1.0,
-           tol=1e-2, max_iter=20000):
-    """Fast-iterative solve of the state-dependent eikonal on a regular grid."""
+           constants=DEFAULT_CONSTANTS, min_thickness=1.0, tol=1e-2):
+    """Solve the eikonal; fast-sweeping (numba) if available, else numpy."""
     rho_g = constants.rho_g
+    if _HAVE_NUMBA:
+        S = np.full(bed.shape, _INF)
+        S[boundary] = boundary_S[boundary]
+        it = _fast_sweep_jit(S, np.ascontiguousarray(bed, dtype=np.float64),
+                             np.ascontiguousarray(tau, dtype=np.float64),
+                             np.ascontiguousarray(inside),
+                             np.ascontiguousarray(boundary),
+                             float(h), rho_g, tol, 200)
+    else:
+        S, it = _solve_numpy(bed, tau, inside, boundary, boundary_S, h, rho_g, tol)
+    S = np.where(inside, np.maximum(S, bed + min_thickness), np.nan)
+    S[~inside] = np.nan
+    return S, it
+
+
+def _solve_numpy(bed, tau, inside, boundary, boundary_S, h, rho_g,
+                 tol=1e-2, max_iter=20000):
+    """Vectorized Jacobi fast-iterative solve (fallback when numba is absent)."""
     ny, nx = bed.shape
     S = np.full((ny, nx), np.inf)
     S[boundary] = boundary_S[boundary]
@@ -124,9 +210,6 @@ def _solve(bed, tau, inside, boundary, boundary_S, h,
         if change < tol:
             break
 
-    # Enforce the physical floor (S >= B + min_thickness) and mask outside.
-    S = np.where(inside, np.maximum(S, bed + min_thickness), np.nan)
-    S[~inside] = np.nan
     return S, it
 
 

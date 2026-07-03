@@ -39,6 +39,11 @@ gis = [
 bmi = [
     "bmipy>=2.0",
 ]
+# JIT-compiled fast-sweeping for the grid solver (falls back to numpy without it).
+# numba currently requires numpy <= 2.4.
+fast = [
+    "numba>=0.61",
+]
 test = [
     "pytest>=7.0",
 ]
