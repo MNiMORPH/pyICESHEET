@@ -19,6 +19,9 @@ venv/
 *.swp
 .DS_Store
 
+# Claude Code agent worktrees / session artifacts
+.claude/
+
 # Large / downloaded data (Greenland bed DEM etc. — not redistributed)
 *.nc
 *.grd
